@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc -b",
     "check-types": "tsc -b",
+    "test": "vitest run",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate:deploy": "drizzle-kit migrate",
@@ -16,13 +17,14 @@
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
+    "drizzle-valibot": "^0.4.2",
     "pg": "^8.23.0",
-    "zod": "catalog:"
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@school-admissions/config": "workspace:*",
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "1.0.0-rc.4",
+    "drizzle-kit": "^0.31.10",
     "typescript": "catalog:",
     "varlock": "catalog:"
   }

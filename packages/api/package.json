@@ -10,13 +10,13 @@
     "check-types": "tsc -b"
   },
   "dependencies": {
+    "@school-admissions/auth": "workspace:*",
+    "@school-admissions/db": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
-    "@orpc/zod": "catalog:",
-    "@school-admissions/auth": "workspace:*",
-    "@school-admissions/db": "workspace:*",
-    "zod": "catalog:"
+    "@orpc/valibot": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@school-admissions/config": "workspace:*",

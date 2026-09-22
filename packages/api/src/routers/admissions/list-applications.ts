@@ -1,5 +1,5 @@
 import { g1Application } from "@school-admissions/db/schema/admissions";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 
@@ -8,6 +8,7 @@ export const listApplications = protectedProcedure.handler(
     const rows = await context.db
       .select()
       .from(g1Application)
+      .where(eq(g1Application.userId, context.session.user.id))
       .orderBy(desc(g1Application.createdAt));
 
     return rows.map((row) => ({

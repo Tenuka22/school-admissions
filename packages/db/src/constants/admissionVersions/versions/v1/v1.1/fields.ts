@@ -2,8 +2,12 @@ import {
   DIVISIONS_BY_DISTRICT,
   DivisionSchema,
   DistrictSchema,
+  ELECTORAL_DISTRICTS,
+  GN_DIVISIONS_BY_DIVISION,
 } from "../../../shared/divisions";
-import type { AdmissionFieldDefinition } from "../../../shared/types";
+import type { AdmissionFieldDefinition, FieldDateRangeRule } from "../../../shared/types";
+import { isValidSriLankanNic } from "../../../shared/nic";
+import { isValidPhoneNumberValue } from "../../../shared/phone";
 
 /** Cascading-select mapping: district → its DS divisions. */
 const DISTRICT_TO_DIVISIONS: Record<string, string[]> = {
@@ -11,6 +15,26 @@ const DISTRICT_TO_DIVISIONS: Record<string, string[]> = {
   matara: [...DIVISIONS_BY_DISTRICT.matara],
   hambantota: [...DIVISIONS_BY_DISTRICT.hambantota],
 };
+
+/**
+ * G1 2027 intake eligibility window: the circular requires the child to be
+ * at least 5 and under 6 years old as of 31 Jan of the intake year, i.e.
+ * born between 31 Jan 2021 (oldest allowed) and 31 Jan 2022 (youngest
+ * allowed) inclusive. Re-used by `schema.ts` so the birth-date range check
+ * only lives in one place.
+ */
+export const DATE_OF_BIRTH_RULE: FieldDateRangeRule = {
+  kind: "dateRange",
+  minDate: "2021-01-31",
+  maxDate: "2022-01-31",
+  message: "Child must be born between 31 Jan 2021 and 31 Jan 2022 to be eligible for the 2027 intake.",
+  ageAsOf: "2027-01-31",
+  ageLabel: "at the 2027 intake",
+};
+
+const NIC_MESSAGE =
+  "Enter a valid Sri Lankan NIC: 9 digits followed by V/X, or 12 digits, encoding a real birth date";
+const PHONE_MESSAGE = "Enter a valid phone number";
 
 /**
  * Complete G1 2027 admission fields — every field of the source aloysius-g1
@@ -80,7 +104,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "text",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
   },
   {
     key: "sinhalaName",
@@ -88,7 +112,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "text",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
   },
   {
     key: "gender",
@@ -96,7 +120,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "select",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
     options: ["Female", "Male"],
   },
   {
@@ -105,7 +129,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "select",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
     options: ["Catholic", "Christian", "Buddhist", "Islam", "Hindu"],
   },
   {
@@ -114,7 +138,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "select",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
     options: ["Sinhala", "Tamil"],
   },
   {
@@ -123,7 +147,8 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "date",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
+    rules: [DATE_OF_BIRTH_RULE],
   },
   {
     key: "birthCertificateNumber",
@@ -131,7 +156,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     type: "text",
     required: true,
     step: "applicant",
-    group: "Applicant Details",
+    group: "Child Details",
   },
 
   // ── Step: guardian ──────────────────────────────────────────────────────
@@ -167,14 +192,16 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     required: true,
     step: "guardian",
     group: "Parent / Guardian Details",
+    rules: [{ kind: "validator", validate: (v) => typeof v === "string" && isValidSriLankanNic(v), message: NIC_MESSAGE }],
   },
   {
     key: "guardianPhone",
     label: "Phone Number",
-    type: "text",
+    type: "phone",
     required: true,
     step: "guardian",
     group: "Parent / Guardian Details",
+    rules: [{ kind: "validator", validate: isValidPhoneNumberValue, message: PHONE_MESSAGE }],
   },
   {
     key: "guardianEmail",
@@ -203,6 +230,16 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     group: "Permanent Address",
   },
   {
+    key: "sameAsPermanent",
+    label: "Current Address Same as Permanent",
+    type: "boolean",
+    required: false,
+    step: "residence",
+    group: "Current Address",
+    clearsOnChange: ["currentAddressEn", "currentAddressSi"],
+    defaultValue: true,
+  },
+  {
     key: "currentAddressEn",
     label: "Current Address (English)",
     type: "text",
@@ -210,6 +247,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     step: "residence",
     group: "Current Address",
     visibleWhen: [{ field: "sameAsPermanent", in: [false] }],
+    ui: { hideWhenNotApplicable: true },
   },
   {
     key: "currentAddressSi",
@@ -219,15 +257,7 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     step: "residence",
     group: "Current Address",
     visibleWhen: [{ field: "sameAsPermanent", in: [false] }],
-  },
-  {
-    key: "sameAsPermanent",
-    label: "Current Address Same as Permanent",
-    type: "boolean",
-    required: false,
-    step: "residence",
-    group: "Current Address",
-    clearsOnChange: ["currentAddressEn", "currentAddressSi"],
+    ui: { hideWhenNotApplicable: true },
   },
   {
     key: "district",
@@ -253,11 +283,18 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
     step: "residence",
     group: "Administrative Divisions",
     enumSchema: DivisionSchema,
+    restrictsOptions: [
+      {
+        field: "gnDivision",
+        optionsByValue: GN_DIVISIONS_BY_DIVISION,
+      },
+    ],
+    clearsOnChange: ["gnDivision"],
   },
   {
     key: "gnDivision",
     label: "Grama Niladhari Division",
-    type: "text",
+    type: "select",
     required: true,
     step: "residence",
     group: "Administrative Divisions",
@@ -265,10 +302,11 @@ export const subversion1Fields: AdmissionFieldDefinition[] = [
   {
     key: "electoralDistrict",
     label: "Electoral District",
-    type: "text",
+    type: "select",
     required: true,
     step: "residence",
     group: "Administrative Divisions",
+    options: ELECTORAL_DISTRICTS,
   },
 
   // ── Step: declaration ───────────────────────────────────────────────────

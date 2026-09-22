@@ -1,0 +1,19 @@
+[project]
+name = "school-scraper"
+version = "0.1.0"
+description = "Scrape Google Maps details for every school in the Sri Lanka government school CSV listing"
+readme = "README.md"
+authors = [
+    { name = "Tenuka22", email = "tenukaomaljith2009@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "scrapling[fetchers]>=0.4.9",
+]
+
+[project.scripts]
+school-scraper = "school_scraper:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

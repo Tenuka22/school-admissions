@@ -44,10 +44,10 @@ Every category caps at 100 marks, every scored field from the g1 `marking-scheme
 Categories 6.1, 6.3, 6.5 and 6.6 carry a `map` field (`schoolsWithinRadius`) with a `mapConfig`:
 
 ```ts
-mapConfig: { maxMarks: 50, pointsPerSchool: 5, pointsKm: 10 }
+mapConfig: { maxMarks: 50, pointsPerSchool: 5 }
 ```
 
-The applicant pins their home on the map; the system counts government schools inside the `pointsKm` circle. Proximity is a scarcity criterion: the category starts at `maxMarks` and **deducts** `pointsPerSchool` marks per nearby school, floored at 0.
+There's no fixed radius in the config: the applicant's home (Location step) and the admitting school (`HOME_SCHOOL_ID` in `apps/web/src/lib/g1/school-config.ts`) fix the circle themselves - its radius is the actual home-to-school distance, via `compatibleSchoolsWithinRadius` in `@school-admissions/db/constants/schools`. Only gender-compatible schools count (a boys' school never treats a girls'-only school as a competing alternative). Proximity is a scarcity criterion: the category starts at `maxMarks` and **deducts** `pointsPerSchool` marks per nearby school, floored at 0.
 
 | Category | Max | Per school |
 | -------- | --- | ---------- |

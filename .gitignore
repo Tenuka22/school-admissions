@@ -56,3 +56,13 @@ coverage
 .cache
 tmp
 temp
+
+# Python
+.venv
+__pycache__
+*.pyc
+.uv-cache
+
+# school-scraper generated cache (regeneratable, large; schools_map_data.json
+# IS tracked - it's the snapshot the web catalog is regenerated from)
+apps/school_scraper/data/schools_map_cache.json

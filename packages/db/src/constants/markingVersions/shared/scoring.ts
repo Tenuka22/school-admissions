@@ -309,11 +309,14 @@ export const deedAgeWeight = (years: number | undefined): number => {
 // ─── Map / proximity ─────────────────────────────────────────────────────────
 
 /**
- * MAP FIELD DEDUCTION — the applicant drops a pin and the system counts
- * government schools inside the circle (`schoolsWithinRadius` = ids found
- * within `pointsKm`). Proximity is a scarcity/priority criterion: FEWER
- * competing nearby schools means fewer alternatives, so the category starts
- * at `max` and DEDUCTS `perSchool` marks per school found, floored at 0.
+ * MAP FIELD DEDUCTION \u2014 `schoolsWithinRadius` holds the ids of every
+ * gender-compatible catalog school at least as close to the applicant's
+ * home as the school they're applying to (see `compatibleSchoolsWithinRadius`
+ * in `@school-admissions/db/constants/schools` \u2014 the radius is the
+ * applicant's real home-to-school distance, never a fixed config number).
+ * Proximity is a scarcity/priority criterion: FEWER competing nearby schools
+ * means fewer alternatives, so the category starts at `max` and DEDUCTS
+ * `perSchool` marks per school found, floored at 0.
  */
 export const proximityMarks = (
   inputs: Inputs,

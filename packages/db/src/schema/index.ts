@@ -3,11 +3,8 @@ export type { Brand } from "./brand";
 
 export {
   account,
-  accountRelations,
   session,
-  sessionRelations,
   user,
-  userRelations,
   verification,
 } from "./auth";
 

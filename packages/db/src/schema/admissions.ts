@@ -59,10 +59,12 @@ export const g1Application = pgTable(
   "g1_application",
   {
     id: text("id").primaryKey(),
-    /** Reference to the user who submitted/owns this application */
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * The user who submitted this application, when they were signed in.
+     * Applications can be created and filled out anonymously (the
+     * `id` in the URL is the access key), so this is nullable.
+     */
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** Application number — globally unique, e.g. "G1/2027/001" */
     applicationNumber: text("application_number").notNull().unique(),
     /** Which admission version this application was created under */

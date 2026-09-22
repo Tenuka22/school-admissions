@@ -11,14 +11,14 @@ import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { object, record, string, unknown } from "valibot";
 
-import { protectedProcedure } from "../../index";
+import { publicProcedure } from "../../index";
 
 const inputSchema = object({
   id: string(),
   data: record(string(), unknown()),
 });
 
-export const updateApplicationData = protectedProcedure
+export const updateApplicationData = publicProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     const [app] = await context.db
@@ -33,13 +33,13 @@ export const updateApplicationData = protectedProcedure
       });
     }
 
-    if (app.userId !== context.session?.user.id) {
-      throw new ORPCError("FORBIDDEN");
-    }
-
-    if (app.status !== "draft") {
+    // "draft" (first submission) and "submitted" (editing an already-submitted
+    // application before review starts) can both still be written; once an
+    // admin has moved it into review or decided it, the applicant's own
+    // edits would silently undo that review state, so those stay locked.
+    if (app.status !== "draft" && app.status !== "submitted") {
       throw new ORPCError("BAD_REQUEST", {
-        message: "Only draft applications can be updated",
+        message: "This application is under review and can no longer be edited",
       });
     }
 
@@ -75,9 +75,13 @@ export const updateApplicationData = protectedProcedure
     });
 
     const bumped = app.currentSubversion < latestSub;
+    // First successful save transitions draft -> submitted so the applicant
+    // can't keep re-"submitting" the same application indefinitely; editing
+    // it again afterward is a re-save (status stays "submitted", not reset
+    // back to "draft").
     await context.db
       .update(g1Application)
-      .set({ currentSubversion: latestSub })
+      .set({ currentSubversion: latestSub, status: "submitted" })
       .where(eq(g1Application.id, app.id));
 
     if (bumped) {

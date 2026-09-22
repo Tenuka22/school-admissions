@@ -12,11 +12,11 @@ import { ORPCError } from "@orpc/server";
 import { like } from "drizzle-orm";
 import { pick } from "valibot";
 
-import { protectedProcedure } from "../../index";
+import { publicProcedure } from "../../index";
 
 const inputSchema = pick(g1ApplicationInsertSchema, ["versionKey"]);
 
-export const createApplication = protectedProcedure
+export const createApplication = publicProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     const version = ADMISSION_VERSIONS[input.versionKey];
@@ -33,10 +33,10 @@ export const createApplication = protectedProcedure
       });
     }
 
-    const userId = context.session?.user.id;
-    if (!userId) {
-      throw new ORPCError("UNAUTHORIZED");
-    }
+    // No login required to start an application — when a session exists
+    // (e.g. an admin testing the flow) we still record it, but the created
+    // application's `id` is itself the access key for anonymous use.
+    const userId = context.session?.user.id ?? null;
 
     // Generate application number: G1/{intakeYear}/{sequential}
     const year = version.intakeYear;
@@ -72,7 +72,7 @@ export const createApplication = protectedProcedure
     const emptyData: Record<string, unknown> = {};
     if (fields) {
       for (const field of fields) {
-        emptyData[field.key] = null;
+        emptyData[field.key] = field.defaultValue ?? null;
       }
     }
 

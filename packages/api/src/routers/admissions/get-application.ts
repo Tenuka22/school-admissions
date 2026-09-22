@@ -1,6 +1,7 @@
 import {
   getLatestSubversionNumber,
-  getFieldsChangedBetweenSubversions,
+  calculateMigrationRequirements,
+  getFieldsForSubversion,
 } from "@school-admissions/db/constants/admissionVersions/index";
 import {
   g1Application,
@@ -12,11 +13,11 @@ import { ORPCError } from "@orpc/server";
 import { eq, desc } from "drizzle-orm";
 import { pick } from "valibot";
 
-import { protectedProcedure } from "../../index";
+import { publicProcedure } from "../../index";
 
 const inputSchema = pick(g1ApplicationSelectSchema, ["id"]);
 
-export const getApplication = protectedProcedure
+export const getApplication = publicProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     const [app] = await context.db
@@ -31,6 +32,8 @@ export const getApplication = protectedProcedure
       });
     }
 
+    // No login required -- the application `id` (an unguessable UUID) is
+    // the access key, matching the public application flow.
     // Get the latest data snapshot
     const [latestData] = await context.db
       .select()
@@ -44,13 +47,24 @@ export const getApplication = protectedProcedure
 
     // Check if update is needed
     const updateNeeded = app.currentSubversion < latestSub;
-    const { newFields, newlyRequired } = updateNeeded
-      ? getFieldsChangedBetweenSubversions(
+    const { newFields, newlyRequired, removedFieldKeys, renamed } = updateNeeded
+      ? calculateMigrationRequirements(
           app.versionKey,
           app.currentSubversion,
           latestSub
         )
-      : { newFields: [], newlyRequired: [] };
+      : { newFields: [], newlyRequired: [], removedFieldKeys: [], renamed: [] };
+
+    // `removedFieldKeys` only has keys (the fields no longer exist in the
+    // latest definitions to look their labels up from) -- resolve labels
+    // from the subversion the application is currently on, where they still
+    // exist.
+    const removedFields =
+      removedFieldKeys.length > 0
+        ? (getFieldsForSubversion(app.versionKey, app.currentSubversion) ?? []).filter((f) =>
+            removedFieldKeys.includes(f.key)
+          )
+        : [];
 
     // Get version log
     const versionLog = await context.db
@@ -72,6 +86,8 @@ export const getApplication = protectedProcedure
       updateNeeded,
       newFields,
       newlyRequired,
+      removedFields,
+      renamed: renamed.map((r) => ({ oldKey: r.oldKey, field: r.field })),
       versionLog: versionLog.map((log) => ({
         subversion: log.subversion,
         trigger: log.trigger,

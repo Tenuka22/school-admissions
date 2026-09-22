@@ -8,16 +8,16 @@ import {
   LocationSourceSchema,
   ReligionSchema,
 } from "../../../shared/enums";
+import { isValidSriLankanNic } from "../../../shared/nic";
+import { PhoneNumberSchema } from "../../../shared/phone";
+import { DATE_OF_BIRTH_RULE } from "./fields";
 
 /**
  * Complete G1 2027 application schema — every field of the source
  * aloysius-g1 form's step schemas (applicant, guardian, residence,
  * declaration) merged into one object, plus the location-map capture.
  * Categories live separately (the marking system owns them).
- *
- * Sri Lankan NIC: 9 digits followed by V/X, or 12 digits (g1 nicRegex).
  */
-const NIC_REGEX = /^(?:\d{9}[VvXx]|\d{12})$/u;
 
 export const subversion1Schema = v.object({
   // ── Location step (map capture) ─────────────────────────────────────────
@@ -36,7 +36,14 @@ export const subversion1Schema = v.object({
   gender: GenderSchema,
   religion: ReligionSchema,
   educationMedium: EducationMediumSchema,
-  dateOfBirth: v.pipe(v.string(), v.isoDate("Invalid date format")),
+  dateOfBirth: v.pipe(
+    v.string(),
+    v.isoDate("Invalid date format"),
+    v.check(
+      (value) => value >= DATE_OF_BIRTH_RULE.minDate && value <= DATE_OF_BIRTH_RULE.maxDate,
+      DATE_OF_BIRTH_RULE.message
+    )
+  ),
   birthCertificateNumber: v.pipe(
     v.string(),
     v.nonEmpty("Birth certificate number is required")
@@ -52,12 +59,12 @@ export const subversion1Schema = v.object({
   guardianNic: v.pipe(
     v.string(),
     v.nonEmpty("NIC number is required"),
-    v.regex(
-      NIC_REGEX,
-      "Enter a valid Sri Lankan NIC: 9 digits followed by V/X, or 12 digits"
+    v.check(
+      isValidSriLankanNic,
+      "Enter a valid Sri Lankan NIC: 9 digits followed by V/X, or 12 digits, encoding a real birth date"
     )
   ),
-  guardianPhone: v.pipe(v.string(), v.nonEmpty("Phone number is required")),
+  guardianPhone: PhoneNumberSchema,
   guardianEmail: v.optional(
     v.pipe(v.string(), v.email("Enter a valid email address"))
   ),

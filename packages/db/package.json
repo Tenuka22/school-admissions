@@ -18,13 +18,14 @@
   "dependencies": {
     "drizzle-orm": "catalog:",
     "drizzle-valibot": "^0.4.2",
+    "libphonenumber-js": "^1.13.13",
     "pg": "^8.23.0",
     "valibot": "catalog:"
   },
   "devDependencies": {
     "@school-admissions/config": "workspace:*",
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "^1.0.0-rc.5",
     "typescript": "catalog:",
     "varlock": "catalog:"
   }

@@ -218,7 +218,6 @@ describe("map proximity deduction (schoolsWithinRadius)", () => {
       const category = categories.find((c) => c.type === type);
       const mapField = category?.fields.find((f) => f.type === "map");
       expect(mapField?.key).toBe("schoolsWithinRadius");
-      expect(mapField?.mapConfig?.pointsKm).toBe(10);
     }
     const c61 = categories
       .find((c) => c.type === "6.1")
@@ -226,7 +225,6 @@ describe("map proximity deduction (schoolsWithinRadius)", () => {
     expect(c61?.mapConfig).toStrictEqual({
       maxMarks: 50,
       pointsPerSchool: 5,
-      pointsKm: 10,
     });
   });
 });

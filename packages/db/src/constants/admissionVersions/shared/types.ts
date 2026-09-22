@@ -7,8 +7,12 @@ export const FieldTypeSchema = v.picklist([
   "select",
   "boolean",
   "file",
-  /** Map pin — the system derives values from the circle (e.g. nearby schools). */
+  /** Structured phone number \u2014 stores country code and national number separately. */
+  "phone",
+  /** Map pin \u2014 the system derives values from the circle (e.g. nearby schools). */
   "map",
+  /** Checkbox grid of the scored electoral-register year window (see `electoralRegisterYears`). */
+  "electoralYears",
   /** Repeatable structured entries (e.g. sports achievements). */
   "list",
 ]);
@@ -37,17 +41,19 @@ export const ADMISSION_STEPS: AdmissionStepKey[] = [
 
 /**
  * A map-based proximity field: the applicant pins their home on the map, the
- * system counts government schools within `pointsKm`, and marks are DEDUCTED
- * per school — starting from `maxMarks` (fewer nearby schools = fewer
- * alternatives = higher marks), floored at 0.
+ * system counts gender-compatible government schools within a radius, and
+ * marks are DEDUCTED per school — starting from `maxMarks` (fewer nearby
+ * schools = fewer alternatives = higher marks), floored at 0. The radius
+ * itself is not configured here: it's the applicant's actual home-to-school
+ * distance (see `compatibleSchoolsWithinRadius` in
+ * `@school-admissions/db/constants/schools`), so it can never be gamed by
+ * tuning a fixed number per category.
  */
 export interface AdmissionMapFieldConfig {
   /** Starting marks before the per-school deduction. */
   maxMarks: number;
   /** Marks removed per school found within the circle. */
   pointsPerSchool: number;
-  /** Radius of the circle drawn on the map (km). */
-  pointsKm: number;
 }
 
 /** Values compared against another field's current value in dependency rules. */
@@ -79,6 +85,36 @@ export interface FieldOptionRestriction {
   optionsByValue: Record<string, string[]>;
 }
 
+/**
+ * Value-level rule checked against the field's OWN current value (unlike
+ * `visibleWhen`/`gates`, which check other fields to decide enterability).
+ * Shaped as a discriminated union on `kind` so more rule kinds can be added
+ * later without touching every existing field definition.
+ */
+export interface FieldDateRangeRule {
+  kind: "dateRange";
+  /** Inclusive earliest allowed ISO date (yyyy-mm-dd). */
+  minDate: string;
+  /** Inclusive latest allowed ISO date (yyyy-mm-dd). */
+  maxDate: string;
+  /** Shown under the field when the value falls outside the range. */
+  message: string;
+  /** ISO cutoff date the live "will be N years old" preview measures against. */
+  ageAsOf?: string;
+  /** Suffix appended after the computed age in the preview, e.g. "at the 2027 intake". */
+  ageLabel?: string;
+}
+
+/** Arbitrary value-level check \u2014 NIC/phone format validators use this instead of a bespoke rule kind each. */
+export interface FieldValidatorRule {
+  kind: "validator";
+  /** Returns `true` when `value` is valid; only invoked once the field has a non-empty value. */
+  validate: (value: unknown) => boolean;
+  /** Shown under the field when `validate` returns `false`. */
+  message: string;
+}
+export type FieldRule = FieldDateRangeRule | FieldValidatorRule;
+
 /** Enterable state of a field resolved against the current form data. */
 export interface FieldResolution {
   disabled: boolean;
@@ -100,6 +136,13 @@ export interface FieldUiConfig {
   description?: string;
   /** Value is written by the system (e.g. the location capture), never typed. */
   readOnly?: boolean;
+  /**
+   * Skip rendering the field entirely (instead of the default greyed-out
+   * "Not applicable" control) when a `visibleWhen` condition fails \u2014 for
+   * fields whose whole point is to disappear, like an address mirrored from
+   * another field while a "same as" toggle holds.
+   */
+  hideWhenNotApplicable?: boolean;
 }
 
 /**
@@ -155,8 +198,12 @@ export interface AdmissionFieldDefinition {
   clearsOnChange?: string[];
   /** Cascading-select behaviour: restricts options of the listed selects. */
   restrictsOptions?: FieldOptionRestriction[];
-  /** UI behaviour overrides (label visibility, help text) — version-driven. */
+  /** Declarative value-level validation (e.g. a birth-date eligibility window). */
+  rules?: FieldRule[];
+  /** UI behaviour overrides (label visibility, help text) \u2014 version-driven. */
   ui?: FieldUiConfig;
+  /** Value a new application starts with (e.g. a toggle defaulting on). */
+  defaultValue?: unknown;
 }
 
 /**
@@ -192,6 +239,31 @@ export const resolveFieldStates = (
   }
 
   return states;
+};
+
+/** Value-level errors for the current form data, driven by each field's declared `rules`. */
+export const resolveFieldErrors = (
+  fields: AdmissionFieldDefinition[],
+  data: Record<string, unknown>
+): Record<string, string> => {
+  const errors: Record<string, string> = {};
+  for (const field of fields) {
+    const value = data[field.key];
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    for (const rule of field.rules ?? []) {
+      // ISO yyyy-mm-dd dates sort lexicographically, so string comparison
+      // is exact \u2014 no Date parsing/timezone drift.
+      if (rule.kind === "dateRange" && typeof value === "string" && (value < rule.minDate || value > rule.maxDate)) {
+        errors[field.key] = rule.message;
+      }
+      if (rule.kind === "validator" && !rule.validate(value)) {
+        errors[field.key] = rule.message;
+      }
+    }
+  }
+  return errors;
 };
 
 /** Options available for a select after applying every parent restriction. */

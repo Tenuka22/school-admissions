@@ -159,13 +159,18 @@ describe("subversion schemas", () => {
     gender: "Male" as const,
     religion: "Buddhist" as const,
     educationMedium: "Sinhala" as const,
-    dateOfBirth: "2018-05-15",
+    dateOfBirth: "2021-06-15",
     birthCertificateNumber: "BC12345",
     guardianRelationship: "Mother" as const,
     guardianFullName: "Kamala Perera",
     guardianSinhalaName: "කමලා පෙරේරා",
     guardianNic: "991234567V",
-    guardianPhone: "0771234567",
+    guardianPhone: {
+      country: "LK",
+      countryCallingCode: "94",
+      nationalNumber: "771234567",
+      e164: "+94771234567",
+    },
     permanentAddressEn: "123 Main St",
     permanentAddressSi: "ප්‍රධාන පාර 123",
     currentAddressEn: "123 Main St",
@@ -335,6 +340,8 @@ describe("dependency resolution", () => {
     });
     expect(next.district).toBeNull();
     expect(next.division).toBeNull();
-    expect(next.gnDivision).toBe("Udugama");
+    // gnDivision now cascades from division (GN divisions belong to a DS
+    // division), so it clears recursively too instead of surviving stale.
+    expect(next.gnDivision).toBeNull();
   });
 });

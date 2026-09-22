@@ -82,6 +82,6 @@ Helpers: `resolveFieldStates`, `resolveFieldOptions`, `clearFieldAndDependents`,
 | `SubversionModule<TSchema>` | A single subversion (schema, fields, delta) |
 | `AdmissionFieldDefinition` | A field (key, label, type, required, options, step, group, dependencies, mapConfig, enumSchema) |
 | `AdmissionStepKey` | Union of form-step keys |
-| `AdmissionMapFieldConfig` | Map proximity deduction (maxMarks, pointsPerSchool, pointsKm) |
+| `AdmissionMapFieldConfig` | Map proximity deduction (maxMarks, pointsPerSchool) \u2014 radius is auto-derived from home-to-school distance, not configured |
 | `SubversionDelta` | Migration delta (added, removed, patched, renamed) |
 | `FieldType` | Union of valid field types (text, number, date, select, boolean, file, map, list) |

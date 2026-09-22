@@ -70,6 +70,7 @@ export const getFieldsForSubversion = (
  * - `newFields` — fields added between from and to
  * - `newlyRequired` — fields that existed but became required
  * - `removedFieldKeys` — fields removed between from and to
+ * - `renamed` — fields whose key changed (old key/label paired with the new field)
  */
 export const calculateMigrationRequirements = (
   versionKey: string,
@@ -84,6 +85,7 @@ export const calculateMigrationRequirements = (
   const newFields: AdmissionFieldDefinition[] = [];
   const newlyRequired: AdmissionFieldDefinition[] = [];
   const removedFieldKeys: string[] = [];
+  const renamed: { oldKey: string; field: AdmissionFieldDefinition }[] = [];
 
   for (let s = fromSubversion + 1; s <= toSubversion; s += 1) {
     const mod = version.subversions[s];
@@ -98,6 +100,14 @@ export const calculateMigrationRequirements = (
     }
     if (delta.removed) {
       removedFieldKeys.push(...delta.removed);
+    }
+    if (delta.renamed) {
+      for (const rename of delta.renamed) {
+        const field = mod.fields.find((f) => f.key === rename.newKey);
+          if (field) {
+          renamed.push({ oldKey: rename.oldKey, field });
+        }
+      }
     }
     if (delta.patched) {
       for (const patch of delta.patched) {
@@ -115,6 +125,7 @@ export const calculateMigrationRequirements = (
     newFields,
     newlyRequired,
     removedFieldKeys,
+    renamed,
   };
 };
 

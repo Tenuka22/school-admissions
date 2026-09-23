@@ -25,7 +25,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "My App",
+        title: "G1 Admissions",
+      },
+      {
+        name: "description",
+        content: "Apply for Grade 1 admission online — no account needed.",
       },
     ],
     links: [

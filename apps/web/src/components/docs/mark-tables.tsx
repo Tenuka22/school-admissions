@@ -1,4 +1,5 @@
 import { Badge } from "@school-admissions/ui/components/badge";
+import { IconArrowBarDown, IconFlag3Filled, IconMinus } from "@tabler/icons-react";
 import { cn } from "cn";
 
 /** Small labeled number chip — used for flat per-item / per-year rates and caps. */
@@ -178,6 +179,51 @@ export function RateTierTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Visualizes the map-proximity deduction mechanic: the category *starts* at
+ * its cap and loses `perSchool` marks for every competing nearby school
+ * found, floored at 0 — never accumulated upward. Color/icon-coded so the
+ * direction (down, not up) reads at a glance instead of two bare numbers.
+ */
+export function ProximityScale({
+  maxMarks,
+  perSchool,
+}: {
+  maxMarks: number;
+  perSchool: number;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-xs font-medium text-foreground">Map proximity — deducts per nearby school</p>
+      <div className="overflow-hidden rounded-md border">
+        <div className="flex items-center justify-between bg-primary/10 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+            <IconFlag3Filled className="size-3.5" />
+            Starts at
+          </span>
+          <span className="font-mono text-sm font-semibold text-primary">{maxMarks}</span>
+    </div>
+        <div className="flex items-center justify-between border-t bg-destructive/10 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+            <IconMinus className="size-3.5" />
+            Per nearby school found
+          </span>
+          <span className="font-mono text-sm font-semibold text-destructive">
+            −{perSchool}
+          </span>
+    </div>
+        <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <IconArrowBarDown className="size-3.5" />
+            Floor
+          </span>
+          <span className="font-mono text-sm font-semibold text-muted-foreground">0</span>
+    </div>
+    </div>
     </div>
   );
 }

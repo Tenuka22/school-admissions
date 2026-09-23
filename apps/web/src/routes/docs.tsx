@@ -92,7 +92,7 @@ import { cn } from "cn";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { MarkTable, RateTierTable, StatChip, TierTable } from "@/components/docs/mark-tables";
+import { MarkTable, ProximityScale, RateTierTable, StatChip, TierTable } from "@/components/docs/mark-tables";
 
 export const Route = createFileRoute("/docs")({
   component: DocsPage,
@@ -367,10 +367,10 @@ function CategorySection({ category }: { category: MarkingCategoryDefinition }) 
             </div>
           ))}
           {mapField?.mapConfig && (
-            <div className="grid grid-cols-2 gap-2">
-              <StatChip label="Marks per nearby school" value={mapField.mapConfig.pointsPerSchool} />
-              <StatChip label="Proximity cap" value={mapField.mapConfig.maxMarks} />
-            </div>
+            <ProximityScale
+              maxMarks={mapField.mapConfig.maxMarks}
+              perSchool={mapField.mapConfig.pointsPerSchool}
+            />
           )}
         </div>
 

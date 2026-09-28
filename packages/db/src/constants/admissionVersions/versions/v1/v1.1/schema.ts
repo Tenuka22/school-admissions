@@ -9,6 +9,7 @@ import {
   ReligionSchema,
 } from "../../../shared/enums";
 import { isValidSriLankanNic } from "../../../shared/nic";
+import { GpsAuditEntrySchema, LocationHistoryEntrySchema } from "../../../shared/location";
 import { PhoneNumberSchema } from "../../../shared/phone";
 import { DATE_OF_BIRTH_RULE } from "./fields";
 
@@ -26,6 +27,11 @@ export const subversion1Schema = v.object({
   locationLatitude: v.optional(v.number()),
   locationLongitude: v.optional(v.number()),
   locationSource: v.optional(LocationSourceSchema),
+  // Append-only audit trail (see `shared/location.ts`) \u2014 never edited in
+  // place, only grown: every applicant-confirmed point (`locationHistory`)
+  // and every silent background GPS reading (`locationGpsAudit`).
+  locationHistory: v.optional(v.array(LocationHistoryEntrySchema)),
+  locationGpsAudit: v.optional(v.array(GpsAuditEntrySchema)),
 
   // ── Applicant step ──────────────────────────────────────────────────────
   fullName: v.pipe(v.string(), v.nonEmpty("Full name is required")),

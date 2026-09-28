@@ -59,6 +59,9 @@ export type {
 export { isValidSriLankanNic, parseSriLankanNic } from "./shared/nic";
 export type { ParsedNic } from "./shared/nic";
 
+export { GpsAuditEntrySchema, LocationHistoryEntrySchema } from "./shared/location";
+export type { GpsAuditEntry, LocationHistoryEntry } from "./shared/location";
+
 export {
   DEFAULT_PHONE_COUNTRY,
   isValidPhoneNumberValue,

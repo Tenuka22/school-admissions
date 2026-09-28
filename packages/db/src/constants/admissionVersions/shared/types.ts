@@ -174,6 +174,18 @@ export interface LocationCaptureConfig {
    * here (and into `labelField`), falling back to raw coordinates.
    */
   addressField?: string;
+  /**
+   * Field key an append-only array of the applicant's *user-chosen* location
+   * history is written to (see `LocationHistoryEntry`) \u2014 every point they
+   * explicitly confirmed, oldest first. Omit to skip recording history.
+   */
+  historyField?: string;
+  /**
+   * Field key an append-only array of silent background GPS readings is
+   * written to (see `GpsAuditEntry`) \u2014 captured once per page load,
+   * independent of anything the applicant chose. Omit to skip the audit trail.
+   */
+  gpsAuditField?: string;
 }
 
 export interface AdmissionFieldDefinition {

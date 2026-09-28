@@ -24,5 +24,10 @@ export const v1_1: SubversionModule<typeof subversion1Schema> = {
     // The captured point is reverse-geocoded into a street address (with a
     // raw-coordinate fallback) and written to these fields — no typing.
     addressField: "locationAddress",
+    // See `shared/location.ts` \u2014 an append-only audit trail alongside the
+    // single committed point: every location the applicant actually
+    // confirmed, and every silent background GPS reading, independent of it.
+    historyField: "locationHistory",
+    gpsAuditField: "locationGpsAudit",
   },
 };

@@ -1,5 +1,13 @@
 import type { LocationCaptureConfig } from "@school-admissions/db/constants/admissionVersions/index";
+import type { GpsAuditEntry, LocationHistoryEntry, LocationSource } from "@school-admissions/db/constants/admissionVersions/index";
 import { Button } from "@school-admissions/ui/components/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@school-admissions/ui/components/dialog";
 import {
   Field,
   FieldDescription,
@@ -20,12 +28,13 @@ import {
   IconAlertTriangle,
   IconCheck,
   IconLocation,
+  IconMaximize,
   IconMapPin,
   IconPencil,
   IconSettings,
   IconX,
 } from "@tabler/icons-react";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { formatDms, latitudeHemisphere, longitudeHemisphere, parseDmsPair } from "@/lib/g1/dms";
 
@@ -96,7 +105,13 @@ export function LocationStep({ config, data, disabled, onChange }: LocationStepP
   const [locating, setLocating] = useState(false);
   const [mapEditMode, setMapEditMode] = useState(false);
   const [pendingPoint, setPendingPoint] = useState<[number, number] | null>(null);
+  // What kind of capture produced `pendingPoint` \u2014 labels the confirm banner
+  // ("GPS fix" vs "Map pick") and becomes the committed point's `source` once
+  // confirmed. GPS never commits directly: it drops a ghost point here first,
+  // same as a map click, so an inaccurate fix can be caught before it's applied.
+  const [pendingSource, setPendingSource] = useState<LocationSource | null>(null);
   const [manualPreviewPoint, setManualPreviewPoint] = useState<[number, number] | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
 
   const latitude = typeof data[config.latitudeField ?? ""] === "number" ? (data[config.latitudeField ?? ""] as number) : null;
   const longitude = typeof data[config.longitudeField ?? ""] === "number" ? (data[config.longitudeField ?? ""] as number) : null;
@@ -113,18 +128,87 @@ export function LocationStep({ config, data, disabled, onChange }: LocationStepP
     onChange(patch);
   };
 
-  const applyPoint = async (lat: number, lng: number, source: string) => {
+  const history = config.historyField && Array.isArray(data[config.historyField])
+    ? (data[config.historyField] as LocationHistoryEntry[])
+    : [];
+  const gpsAudit = config.gpsAuditField && Array.isArray(data[config.gpsAuditField])
+    ? (data[config.gpsAuditField] as GpsAuditEntry[])
+    : [];
+
+  // Once per mount (i.e. once per page load of this step) — silently takes a
+  // raw device GPS reading and appends it to the background audit trail,
+  // completely independent of whatever the applicant chooses or confirms.
+  // Never written to `latitudeField`/`longitudeField`, never shown as the
+  // applicant's selection: it exists purely so a reviewer can cross-check
+  // the device's actual position against the point the applicant committed
+  // to (see `shared/location.ts`).
+  const gpsAuditRan = useRef(false);
+  useEffect(() => {
+    if (gpsAuditRan.current || disabled || !config.enableGps || !config.gpsAuditField) {
+      return;
+    }
+    gpsAuditRan.current = true;
+    const gpsAuditField = config.gpsAuditField;
+    const append = (entry: GpsAuditEntry) => onChange({ [gpsAuditField]: [...gpsAudit, entry] });
+    if (!navigator.geolocation) {
+      append({ capturedAt: new Date().toISOString(), status: "unsupported" });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        append({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          capturedAt: new Date().toISOString(),
+          status: "granted",
+        });
+      },
+      (geoError) => {
+        append({
+          capturedAt: new Date().toISOString(),
+          status:
+            geoError.code === geoError.PERMISSION_DENIED
+              ? "denied"
+              : geoError.code === geoError.TIMEOUT
+                ? "timeout"
+                : "unavailable",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+    // Deliberately mount-only (see `gpsAuditRan` guard) — this must fire once
+    // per page load, not on every `data`/`gpsAudit` change it itself causes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const applyPoint = async (lat: number, lng: number, source: LocationSource) => {
     setError(null);
     const patch: Record<string, unknown> = {};
     if (config.latitudeField) patch[config.latitudeField] = lat;
     if (config.longitudeField) patch[config.longitudeField] = lng;
     if (config.sourceField) patch[config.sourceField] = source;
+    // Append-only: every point the applicant actually confirms lands here,
+    // oldest first, regardless of how many times they change their mind — the
+    // single committed point above always mirrors just the LAST entry.
+    let nextHistory: LocationHistoryEntry[] | null = null;
+    if (config.historyField) {
+      nextHistory = [...history, { lat, lng, source, capturedAt: new Date().toISOString(), address: null }];
+      patch[config.historyField] = nextHistory;
+    }
     onChange(patch);
 
     setStatus("Finding address...");
     const resolved = await reverseGeocode(lat, lng);
     const finalAddress = resolved ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     setAddress(finalAddress);
+    if (nextHistory && config.historyField) {
+      const historyField = config.historyField;
+      const withAddress = nextHistory.map((entry, index) =>
+        index === nextHistory!.length - 1 ? { ...entry, address: finalAddress } : entry
+      );
+      onChange({ [historyField]: withAddress });
+    }
     setStatus("");
   };
 
@@ -135,11 +219,16 @@ export function LocationStep({ config, data, disabled, onChange }: LocationStepP
     }
     setError(null);
     setLocating(true);
-    setStatus("Finding your current location...");
+    setStatus("Getting a GPS fix...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setLocating(false);
-        void applyPoint(position.coords.latitude, position.coords.longitude, "device");
+        setStatus("");
+        // Never commits directly — a GPS fix can be a rough network-based
+        // estimate, so it drops a ghost point the applicant must verify
+        // (drag/re-pick if it's wrong) before it's applied, same as a map click.
+        setPendingPoint([position.coords.latitude, position.coords.longitude]);
+        setPendingSource("device");
       },
       (geoError) => {
         setLocating(false);
@@ -166,8 +255,15 @@ export function LocationStep({ config, data, disabled, onChange }: LocationStepP
     if (!pendingPoint) {
       return;
     }
-    void applyPoint(pendingPoint[0], pendingPoint[1], "map");
+    void applyPoint(pendingPoint[0], pendingPoint[1], pendingSource ?? "map");
     setPendingPoint(null);
+    setPendingSource(null);
+    setMapEditMode(false);
+  };
+
+  const cancelPendingPoint = () => {
+    setPendingPoint(null);
+    setPendingSource(null);
     setMapEditMode(false);
   };
 
@@ -302,51 +398,116 @@ export function LocationStep({ config, data, disabled, onChange }: LocationStepP
         <div className="grid content-start gap-2">
           {!disabled && (
             <div className="flex items-center justify-between gap-2">
-              {mapEditMode ? (
+              {pendingPoint ? (
                 <div className="flex flex-1 items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs">
                   <span className="flex-1 text-amber-700 dark:text-amber-400">
-                    {pendingPoint
-                      ? `Pending point: ${pendingPoint[0].toFixed(5)}, ${pendingPoint[1].toFixed(5)} — verify it's correct.`
-                      : "Click a point on the map to place a pin."}
+                    {pendingSource === "device"
+                      ? `GPS fix: ${pendingPoint[0].toFixed(5)}, ${pendingPoint[1].toFixed(5)} — this is an approximate reading, verify it's correct before using it.`
+                      : `Pending point: ${pendingPoint[0].toFixed(5)}, ${pendingPoint[1].toFixed(5)} — verify it's correct.`}
                   </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setMapEditMode(false);
-                      setPendingPoint(null);
-                    }}
-                  >
+                  <Button type="button" size="sm" variant="ghost" onClick={cancelPendingPoint}>
                     <IconX size={14} />
                     Cancel
                   </Button>
-                  <Button type="button" size="sm" disabled={!pendingPoint} onClick={confirmPendingPoint}>
+                  <Button type="button" size="sm" onClick={confirmPendingPoint}>
                     <IconCheck size={14} />
                     Use this point
                   </Button>
                 </div>
+              ) : mapEditMode ? (
+                <div className="flex flex-1 items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs">
+                  <span className="flex-1 text-amber-700 dark:text-amber-400">Click a point on the map to place a pin.</span>
+                  <Button type="button" size="sm" variant="ghost" onClick={cancelPendingPoint}>
+                    <IconX size={14} />
+                    Cancel
+                  </Button>
+                </div>
               ) : (
-                <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setMapEditMode(true)}>
-                  <IconPencil size={14} />
-                  Edit on map
-                </Button>
+                <div className="ml-auto flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setMapEditMode(true)}>
+                    <IconPencil size={14} />
+                    Edit on map
+                  </Button>
+                </div>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                title="Expand map"
+                aria-label="Expand map"
+                onClick={() => setMapExpanded(true)}
+              >
+                <IconMaximize size={15} />
+              </Button>
             </div>
           )}
           <div className="h-[420px] overflow-hidden rounded-lg border max-lg:h-[320px]">
             <ClientOnly fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
               <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
-                <LocationStepMapLazy
-                  point={point}
-                  pendingPoint={pendingPoint}
-                  previewPoint={manualPreviewPoint}
-                  editMode={mapEditMode}
-                  onPick={(lat, lng) => setPendingPoint([lat, lng])}
-                />
+                {!mapExpanded && (
+                  <LocationStepMapLazy
+                    point={point}
+                    pendingPoint={pendingPoint}
+                    previewPoint={manualPreviewPoint}
+                    editMode={mapEditMode}
+                    onPick={(lat, lng) => {
+                      setPendingPoint([lat, lng]);
+                      setPendingSource("map");
+                    }}
+                  />
+                )}
               </Suspense>
             </ClientOnly>
           </div>
+
+          <Dialog open={mapExpanded} onOpenChange={setMapExpanded}>
+            <DialogContent className="flex h-[98vh] w-[98vw] max-w-[98vw] flex-col sm:max-w-[98vw]">
+              <DialogHeader>
+                <DialogTitle>Location map</DialogTitle>
+                <DialogDescription>
+                  {mapEditMode
+                    ? "Click a point on the map to place a pin, then confirm it below."
+                    : "The same map, larger — GPS, manual entry and map-pin controls all work here too."}
+                </DialogDescription>
+              </DialogHeader>
+              {!disabled && pendingPoint && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs">
+                  <span className="flex-1 text-amber-700 dark:text-amber-400">
+                    {pendingSource === "device"
+                      ? `GPS fix: ${pendingPoint[0].toFixed(5)}, ${pendingPoint[1].toFixed(5)} — verify it's correct.`
+                      : `Pending point: ${pendingPoint[0].toFixed(5)}, ${pendingPoint[1].toFixed(5)} — verify it's correct.`}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" onClick={cancelPendingPoint}>
+                    <IconX size={14} />
+                    Cancel
+                  </Button>
+                  <Button type="button" size="sm" onClick={confirmPendingPoint}>
+                    <IconCheck size={14} />
+                    Use this point
+                  </Button>
+                </div>
+              )}
+              <div className="min-h-0 flex-1 overflow-hidden rounded-lg border">
+                <ClientOnly fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
+                  <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
+                    {mapExpanded && (
+                      <LocationStepMapLazy
+                        point={point}
+                        pendingPoint={pendingPoint}
+                        previewPoint={manualPreviewPoint}
+                        editMode={mapEditMode}
+                        onPick={(lat, lng) => {
+                          setPendingPoint([lat, lng]);
+                          setPendingSource("map");
+                        }}
+                      />
+                    )}
+                  </Suspense>
+                </ClientOnly>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>

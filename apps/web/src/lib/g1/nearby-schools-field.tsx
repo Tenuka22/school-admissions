@@ -1,7 +1,7 @@
 import { Badge } from "@school-admissions/ui/components/badge";
 import { Button } from "@school-admissions/ui/components/button";
 import type { SchoolCatalogEntry } from "@school-admissions/db/constants/schools/index";
-import { compatibleSchoolsWithinRadius } from "@school-admissions/db/constants/schools/index";
+import { compatibleSchoolsWithinRadius, SCHOOL_CATALOG } from "@school-admissions/db/constants/schools/index";
 import {
   Empty,
   EmptyContent,
@@ -18,7 +18,7 @@ import {
 } from "@school-admissions/ui/components/tooltip";
 import { ClientOnly } from "@tanstack/react-router";
 import { cn } from "cn";
-import { IconCheck, IconInfoCircle, IconMapPin, IconSchool, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck, IconInfoCircle, IconMapPin, IconSchool, IconTrash, IconX } from "@tabler/icons-react";
 import { lazy, Suspense } from "react";
 
 import { HOME_SCHOOL_ID } from "@/lib/g1/school-config";
@@ -155,6 +155,17 @@ export function NearbySchoolsField({
   const selectedCatalogIds = new Set(schools.filter((s) => s.schoolId).map((s) => s.schoolId));
   const manualPins = schools.filter((s) => !s.schoolId);
   const selectedNearbyCount = catalogNearby.filter(({ school }) => selectedCatalogIds.has(school.id)).length;
+  // A school selected while the home point sat somewhere else can fall
+  // outside the freshly-recomputed radius/gender-compatible list once the
+  // applicant edits their home location - it would otherwise just vanish
+  // from the map and side list while still silently counting toward the
+  // deduction below, reading as a lost selection when it's really a live
+  // one the UI stopped showing. Surfacing it as a distinct "ghost" avoids that.
+  const catalogNearbyIds = new Set(catalogNearby.map(({ school }) => school.id));
+  const outOfRangeSelected = schools
+    .filter((s): s is NearbySchoolPoint & { schoolId: string } => Boolean(s.schoolId) && !catalogNearbyIds.has(s.schoolId!))
+    .map((s) => SCHOOL_CATALOG.find((school) => school.id === s.schoolId))
+    .filter((school): school is SchoolCatalogEntry => Boolean(school));
 
   if (!homePoint) {
     return (
@@ -195,8 +206,40 @@ export function NearbySchoolsField({
 
   return (
     <div className="grid gap-3">
+      {outOfRangeSelected.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/40 bg-rose-500/5 px-3 py-2.5 text-xs">
+          <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-600" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-rose-700 dark:text-rose-400">
+              {outOfRangeSelected.length === 1 ? "1 selected school is" : `${outOfRangeSelected.length} selected schools are`}{" "}
+              now outside the {radiusKm.toFixed(1)}km radius
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              Your home location changed since these were marked \u2014 they still count toward the deduction below.
+              Shown on the map as a dashed red marker; remove any that no longer apply.
+            </p>
+            <ul className="mt-1.5 grid gap-1">
+              {outOfRangeSelected.map((school) => (
+                <li key={school.id} className="flex items-center justify-between gap-2 rounded border border-rose-500/20 bg-background/60 px-2 py-1">
+                  <span className="truncate font-medium">{school.name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0"
+                    disabled={disabled}
+                    onClick={() => toggleCatalogSchool(school)}
+                  >
+                    <IconX className="size-3.5" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="h-[360px] overflow-hidden rounded-lg border">
+        <div className="h-[560px] overflow-hidden rounded-lg border">
           <ClientOnly fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
             <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map...</div>}>
               <NearbySchoolMapLazy
@@ -204,6 +247,7 @@ export function NearbySchoolsField({
                 radiusKm={radiusKm}
                 catalogSchools={catalogNearby.map((entry) => entry.school)}
                 selectedCatalogIds={selectedCatalogIds}
+                outOfRangeSchools={outOfRangeSelected}
                 onToggleCatalogSchool={toggleCatalogSchool}
                 manualPins={manualPins.map((s): [number, number] => [s.lat, s.lng])}
                 onAdd={(lat, lng) => {
@@ -216,7 +260,7 @@ export function NearbySchoolsField({
           </ClientOnly>
         </div>
 
-        <div className="flex h-[360px] flex-col overflow-hidden rounded-lg border">
+        <div className="flex h-[560px] flex-col overflow-hidden rounded-lg border">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
             <div className="min-w-0">
               <span className="block text-sm font-medium">Schools nearby</span>
